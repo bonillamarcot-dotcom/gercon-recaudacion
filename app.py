@@ -4,7 +4,7 @@ import io
 import os
 from fpdf import FPDF
 
-st.set_page_config(page_title="Gercon - Auditoría Técnica", layout="wide")
+st.set_page_config(page_title="Gercon - Calculadora de Gestión", layout="wide")
 
 # --- IDENTIDAD CORPORATIVA ---
 logo_path = "logo_gercon.png" 
@@ -13,10 +13,11 @@ if os.path.exists(logo_path):
 else:
     st.sidebar.title("GRUPO GERCON")
 
-st.title("📊 Auditoría Técnica y de Recaudación")
+# NUEVO TÍTULO
+st.title("📊 Calculadora de Generación y Estimado de Recaudación")
 st.markdown("---")
 
-# --- ENTRADAS DE DATOS (TARIFAS EDITABLES) ---
+# --- ENTRADAS DE DATOS ---
 with st.sidebar:
     st.header("⚙️ Configuración")
     poblacion = st.number_input("Población Total (Habitantes)", value=28900, step=100)
@@ -27,13 +28,17 @@ with st.sidebar:
     t_alt = st.number_input("Sector Alto", value=5.0)
     t_com = st.number_input("Comercial", value=30.0)
     t_ind = st.number_input("Industrial", value=350.0)
+    
+    st.markdown("---")
+    # ITEM EDITABLE DE EFECTIVIDAD
+    st.subheader("🎯 Meta de Cobranza")
+    efectividad = st.slider("Porcentaje de Efectividad (%)", min_value=0, max_value=100, value=100)
 
 # --- LÓGICA TÉCNICA (BLOQUEADA POR POBLACIÓN) ---
 ppc = 0.623 # kg/hab/día
 ton_dia_total = (poblacion * ppc) / 1000
-ton_mes_total = ton_dia_total * 30
 
-# Factores proporcionales según el modelo original
+# Factores proporcionales según el modelo original de Gercon
 f_pop, f_med, f_alt = 4644.9/28900, 4644/28900, 2580/28900
 f_com, f_ind = 413/28900, 258/28900
 
@@ -42,7 +47,7 @@ u_pop, u_med, u_alt = int(poblacion * f_pop), int(poblacion * f_med), int(poblac
 u_com, u_ind = int(poblacion * f_com), int(poblacion * f_ind)
 total_viviendas = u_pop + u_med + u_alt
 
-# Estimación de Generación por Sector (Basado en proporción de suscriptores)
+# Estimación de Generación por Sector (Distribución Técnica)
 total_suscriptores = total_viviendas + u_com + u_ind
 ton_res = (total_viviendas / total_suscriptores) * ton_dia_total
 ton_com = (u_com / total_suscriptores) * ton_dia_total
@@ -51,9 +56,12 @@ ton_ind = (u_ind / total_suscriptores) * ton_dia_total
 # Cálculo de Recaudación
 r_pop, r_med, r_alt = u_pop * t_pop, u_med * t_med, u_alt * t_alt
 r_com, r_ind = u_com * t_com, u_ind * t_ind
-total_general = r_pop + r_med + r_alt + r_com + r_ind
+recaudacion_teorica = r_pop + r_med + r_alt + r_com + r_ind
 
-# --- SECCIÓN 1: INDICADORES DE GENERACIÓN (SOLO TONELADAS) ---
+# Aplicación de Efectividad
+recaudacion_real = recaudacion_teorica * (efectividad / 100)
+
+# --- SECCIÓN 1: GENERACIÓN (TONELADAS) ---
 st.subheader("🚛 1. Generación de Desechos (Toneladas Diarias)")
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Total Diario", f"{ton_dia_total:.2f} Ton")
@@ -75,53 +83,48 @@ with col_u2:
 
 st.markdown("---")
 
-# --- SECCIÓN 3: RECAUDACIÓN ESTIMADA ---
-st.subheader("💵 3. Análisis de Recaudación Mensual")
+# --- SECCIÓN 3: RECAUDACIÓN Y EFECTIVIDAD ---
+st.subheader(f"💵 3. Recaudación Estimada ({efectividad}% de efectividad)")
 col_r1, col_r2 = st.columns(2)
 with col_r1:
-    st.write("**Recaudación Residencial:**")
-    st.write(f"- Popular: ${r_pop:,.2f} | Medio: ${r_med:,.2f} | Alto: ${r_alt:,.2f}")
+    st.write("**Recaudación por Sector (Bruta):**")
+    st.write(f"- Residencial: ${r_pop+r_med+r_alt:,.2f}")
+    st.write(f"- Comercial: ${r_com:,.2f}")
+    st.write(f"- Industrial: ${r_ind:,.2f}")
 with col_r2:
-    st.write("**Recaudación No Residencial:**")
-    st.write(f"- Comercial: ${r_com:,.2f} | Industrial: ${r_ind:,.2f}")
-    st.success(f"Recaudación Total: ${total_general:,.2f}")
+    st.write("**Proyección Final:**")
+    st.write(f"Recaudación al 100%: ${recaudacion_teorica:,.2f}")
+    st.success(f"Recaudación Real Estimada: ${recaudacion_real:,.2f}")
 
-# --- EXPORTACIÓN A PDF ESTRUCTURADO ---
+# --- EXPORTACIÓN A PDF ---
 def generate_pdf():
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "INGENIERÍA GERCON C.A. - AUDITORÍA TÉCNICA", ln=True, align="C")
+    pdf.cell(0, 10, "INGENIERÍA GERCON C.A. - REPORTE DE CÁLCULO", ln=True, align="C")
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 10, f"Población: {poblacion} hab | Generación Total: {ton_dia_total:.2f} Ton/día", ln=True, align="C")
+    pdf.cell(0, 10, f"Población: {poblacion} hab | Efectividad de Cobro: {efectividad}%", ln=True, align="C")
     pdf.ln(10)
     
-    # Bloque 1: Generación
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "1. GENERACIÓN POR SECTOR (TON/DÍA)", ln=True)
+    pdf.cell(0, 10, "1. GENERACIÓN (TON/DÍA)", ln=True)
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"- Residencial: {ton_res:.2f} Ton", ln=True)
-    pdf.cell(0, 8, f"- Comercial: {ton_com:.2f} Ton", ln=True)
-    pdf.cell(0, 8, f"- Industrial: {ton_ind:.2f} Ton", ln=True)
+    pdf.cell(0, 8, f"- Total: {ton_dia_total:.2f} Ton (Res: {ton_res:.2f} | Com: {ton_com:.2f} | Ind: {ton_ind:.2f})", ln=True)
     pdf.ln(5)
     
-    # Bloque 2: Unidades
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "2. CENSO DE UNIDADES ESTIMADAS", ln=True)
+    pdf.cell(0, 10, "2. CENSO ESTIMADO", ln=True)
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"- Viviendas: {total_viviendas:,} (Pop: {u_pop} | Med: {u_med} | Alt: {u_alt})", ln=True)
-    pdf.cell(0, 8, f"- Comercios: {u_com:,} | Industrias: {u_ind:,}", ln=True)
+    pdf.cell(0, 8, f"- Viviendas: {total_viviendas:,} | Comercios: {u_com:,} | Industrias: {u_ind:,}", ln=True)
     pdf.ln(5)
     
-    # Bloque 3: Recaudación
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "3. RECAUDACIÓN ESTIMADA", ln=True)
+    pdf.cell(0, 10, "3. ESTIMADO DE RECAUDACIÓN", ln=True)
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"- Subtotal Residencial: ${r_pop+r_med+r_alt:,.2f}", ln=True)
-    pdf.cell(0, 8, f"- Comercial: ${r_com:,.2f} | Industrial: ${r_ind:,.2f}", ln=True)
+    pdf.cell(0, 8, f"- Potencial al 100%: ${recaudacion_teorica:,.2f}", ln=True)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, f"TOTAL RECAUDACIÓN MENSUAL: ${total_general:,.2f}", ln=True)
+    pdf.cell(0, 10, f"RECAUDACIÓN ESTIMADA ({efectividad}%): ${recaudacion_real:,.2f}", ln=True)
     
     return pdf.output(dest="S").encode("latin-1")
 
-st.download_button("📥 Descargar Reporte Técnico (PDF)", generate_pdf(), f"Gercon_Auditoria_{poblacion}.pdf", "application/pdf")
+st.download_button("📥 Descargar Reporte Completo (PDF)", generate_pdf(), f"Gercon_Calculo_{poblacion}.pdf", "application/pdf")
