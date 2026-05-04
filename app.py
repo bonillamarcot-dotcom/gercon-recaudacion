@@ -4,7 +4,7 @@ import io
 import os
 from fpdf import FPDF
 
-st.set_page_config(page_title="Gercon - Auditoría de Recaudación", layout="wide")
+st.set_page_config(page_title="Gercon - Auditoría Técnica", layout="wide")
 
 # --- IDENTIDAD CORPORATIVA ---
 logo_path = "logo_gercon.png" 
@@ -13,7 +13,7 @@ if os.path.exists(logo_path):
 else:
     st.sidebar.title("GRUPO GERCON")
 
-st.title("📊 Auditoría de Gestión: Unidades y Recaudación")
+st.title("📊 Auditoría Técnica y de Recaudación")
 st.markdown("---")
 
 # --- ENTRADAS DE DATOS (TARIFAS EDITABLES) ---
@@ -29,9 +29,9 @@ with st.sidebar:
     t_ind = st.number_input("Industrial", value=350.0)
 
 # --- LÓGICA TÉCNICA (BLOQUEADA POR POBLACIÓN) ---
-ppc = 0.623 
-ton_dia = (poblacion * ppc) / 1000
-ton_mes = ton_dia * 30
+ppc = 0.623 # kg/hab/día
+ton_dia_total = (poblacion * ppc) / 1000
+ton_mes_total = ton_dia_total * 30
 
 # Factores proporcionales según el modelo original
 f_pop, f_med, f_alt = 4644.9/28900, 4644/28900, 2580/28900
@@ -42,53 +42,48 @@ u_pop, u_med, u_alt = int(poblacion * f_pop), int(poblacion * f_med), int(poblac
 u_com, u_ind = int(poblacion * f_com), int(poblacion * f_ind)
 total_viviendas = u_pop + u_med + u_alt
 
+# Estimación de Generación por Sector (Basado en proporción de suscriptores)
+total_suscriptores = total_viviendas + u_com + u_ind
+ton_res = (total_viviendas / total_suscriptores) * ton_dia_total
+ton_com = (u_com / total_suscriptores) * ton_dia_total
+ton_ind = (u_ind / total_suscriptores) * ton_dia_total
+
 # Cálculo de Recaudación
 r_pop, r_med, r_alt = u_pop * t_pop, u_med * t_med, u_alt * t_alt
 r_com, r_ind = u_com * t_com, u_ind * t_ind
-total_rec_residencial = r_pop + r_med + r_alt
-total_general = total_rec_residencial + r_com + r_ind
+total_general = r_pop + r_med + r_alt + r_com + r_ind
 
-# --- INTERFAZ DE RESULTADOS ---
+# --- SECCIÓN 1: INDICADORES DE GENERACIÓN (SOLO TONELADAS) ---
+st.subheader("🚛 1. Generación de Desechos (Toneladas Diarias)")
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Generación Diaria", f"{ton_dia:.2f} Ton")
-m2.metric("Total Viviendas", f"{total_viviendas:,}")
-m3.metric("Total Comercios", f"{u_com:,}")
-m4.metric("Recaudación Total", f"${total_general:,.2f}")
+m1.metric("Total Diario", f"{ton_dia_total:.2f} Ton")
+m2.metric("Residencial", f"{ton_res:.2f} Ton")
+m3.metric("Comercial", f"{ton_com:.2f} Ton")
+m4.metric("Industrial", f"{ton_ind:.2f} Ton")
 
 st.markdown("---")
 
-# --- SECCIÓN 1: RESUMEN DE UNIDADES ---
-st.subheader("🏠 1. Censo Estimado de Unidades")
+# --- SECCIÓN 2: CENSO DE UNIDADES ---
+st.subheader("🏠 2. Censo Estimado de Suscriptores")
 col_u1, col_u2 = st.columns(2)
-
 with col_u1:
-    st.write("**Desglose Residencial:**")
-    st.write(f"- Sector Popular: {u_pop:,} unidades")
-    st.write(f"- Sector Medio: {u_med:,} unidades")
-    st.write(f"- Sector Alto: {u_alt:,} unidades")
-
+    st.write(f"**Total Viviendas: {total_viviendas:,}**")
+    st.write(f"- Popular: {u_pop:,} | Medio: {u_med:,} | Alto: {u_alt:,}")
 with col_u2:
-    st.write("**Sectores Especiales:**")
-    st.write(f"- Total Comercios: {u_com:,} unidades")
-    st.write(f"- Total Industrias: {u_ind:,} unidades")
+    st.write(f"**Sectores Especiales:**")
+    st.write(f"- Comercios: {u_com:,} | Industrias: {u_ind:,}")
 
 st.markdown("---")
 
-# --- SECCIÓN 2: RESUMEN DE RECAUDACIÓN ---
-st.subheader("💵 2. Recaudación Estimada Mensual")
+# --- SECCIÓN 3: RECAUDACIÓN ESTIMADA ---
+st.subheader("💵 3. Análisis de Recaudación Mensual")
 col_r1, col_r2 = st.columns(2)
-
 with col_r1:
     st.write("**Recaudación Residencial:**")
-    st.write(f"- Popular: ${r_pop:,.2f}")
-    st.write(f"- Medio: ${r_med:,.2f}")
-    st.write(f"- Alto: ${r_alt:,.2f}")
-    st.info(f"Subtotal Residencial: ${total_rec_residencial:,.2f}")
-
+    st.write(f"- Popular: ${r_pop:,.2f} | Medio: ${r_med:,.2f} | Alto: ${r_alt:,.2f}")
 with col_r2:
     st.write("**Recaudación No Residencial:**")
-    st.write(f"- Comercial: ${r_com:,.2f}")
-    st.write(f"- Industrial: ${r_ind:,.2f}")
+    st.write(f"- Comercial: ${r_com:,.2f} | Industrial: ${r_ind:,.2f}")
     st.success(f"Recaudación Total: ${total_general:,.2f}")
 
 # --- EXPORTACIÓN A PDF ESTRUCTURADO ---
@@ -96,32 +91,37 @@ def generate_pdf():
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "INGENIERÍA GERCON C.A. - REPORTE DE AUDITORÍA", ln=True, align="C")
+    pdf.cell(0, 10, "INGENIERÍA GERCON C.A. - AUDITORÍA TÉCNICA", ln=True, align="C")
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 10, f"Población: {poblacion} habitantes | Generación: {ton_dia:.2f} Ton/día", ln=True, align="C")
+    pdf.cell(0, 10, f"Población: {poblacion} hab | Generación Total: {ton_dia_total:.2f} Ton/día", ln=True, align="C")
     pdf.ln(10)
     
-    # Bloque Unidades
+    # Bloque 1: Generación
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "1. ESTIMACIÓN DE UNIDADES (CENSO)", ln=True)
+    pdf.cell(0, 10, "1. GENERACIÓN POR SECTOR (TON/DÍA)", ln=True)
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"- Total Viviendas: {total_viviendas:,} (Pop: {u_pop} | Med: {u_med} | Alt: {u_alt})", ln=True)
-    pdf.cell(0, 8, f"- Total Comercios: {u_com:,}", ln=True)
-    pdf.cell(0, 8, f"- Total Industrias: {u_ind:,}", ln=True)
+    pdf.cell(0, 8, f"- Residencial: {ton_res:.2f} Ton", ln=True)
+    pdf.cell(0, 8, f"- Comercial: {ton_com:.2f} Ton", ln=True)
+    pdf.cell(0, 8, f"- Industrial: {ton_ind:.2f} Ton", ln=True)
     pdf.ln(5)
     
-    # Bloque Recaudación
+    # Bloque 2: Unidades
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, "2. RESUMEN DE RECAUDACIÓN ESTIMADA", ln=True)
+    pdf.cell(0, 10, "2. CENSO DE UNIDADES ESTIMADAS", ln=True)
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"- Residencial Popular: ${r_pop:,.2f}", ln=True)
-    pdf.cell(0, 8, f"- Residencial Medio: ${r_med:,.2f}", ln=True)
-    pdf.cell(0, 8, f"- Residencial Alto: ${r_alt:,.2f}", ln=True)
-    pdf.cell(0, 8, f"- Comercial Total: ${r_com:,.2f}", ln=True)
-    pdf.cell(0, 8, f"- Industrial Total: ${r_ind:,.2f}", ln=True)
+    pdf.cell(0, 8, f"- Viviendas: {total_viviendas:,} (Pop: {u_pop} | Med: {u_med} | Alt: {u_alt})", ln=True)
+    pdf.cell(0, 8, f"- Comercios: {u_com:,} | Industrias: {u_ind:,}", ln=True)
+    pdf.ln(5)
+    
+    # Bloque 3: Recaudación
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, "3. RECAUDACIÓN ESTIMADA", ln=True)
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 8, f"- Subtotal Residencial: ${r_pop+r_med+r_alt:,.2f}", ln=True)
+    pdf.cell(0, 8, f"- Comercial: ${r_com:,.2f} | Industrial: ${r_ind:,.2f}", ln=True)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, f"TOTAL RECAUDACIÓN MENSUAL: ${total_general:,.2f}", ln=True)
     
     return pdf.output(dest="S").encode("latin-1")
 
-st.download_button("📥 Descargar Reporte Estructurado (PDF)", generate_pdf(), f"Gercon_Auditoria_{poblacion}.pdf", "application/pdf")
+st.download_button("📥 Descargar Reporte Técnico (PDF)", generate_pdf(), f"Gercon_Auditoria_{poblacion}.pdf", "application/pdf")
