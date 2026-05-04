@@ -2,91 +2,118 @@ import streamlit as st
 import pandas as pd
 import io
 import os
+from fpdf import FPDF
 
-st.set_page_config(page_title="Gercon - Auditoría de Recaudación", layout="wide")
+st.set_page_config(page_title="Gercon - Auditoría Blindada", layout="wide")
 
-# --- GESTIÓN DEL LOGO ---
-logo_path = "logo_gercon.png" # Nombre de tu archivo de imagen
+# --- LOGO DE INGENIERÍA GERCON ---
+logo_path = "logo_gercon.png" 
 if os.path.exists(logo_path):
     st.sidebar.image(logo_path, use_container_width=True)
 else:
     st.sidebar.title("GRUPO GERCON")
 
-st.title("📊 Sistema Integral de Gestión y Recaudación")
+st.title("📊 Auditoría de Recaudación y Generación")
 st.markdown("---")
 
-# --- BARRA LATERAL: PARÁMETROS DE ENTRADA ---
+# --- ÚNICO CAMPO MODIFICABLE ---
 with st.sidebar:
-    st.header("⚙️ Configuración del Municipio")
-    poblacion = st.number_input("Población Total (Habitantes)", value=28900)
-    
-    st.subheader("🏡 Tarifas Residenciales ($)")
-    t_pop = st.number_input("Sector Popular", value=1.5)
-    t_med = st.number_input("Sector Medio", value=3.0)
-    t_alt = st.number_input("Sector Alto", value=5.0)
-    
-    st.subheader("🏢 Unidades Comerciales e Industriales")
-    cant_comercio = st.number_input("Cantidad de Comercios", value=413)
-    t_com = st.number_input("Tarifa Comercial Promedio ($)", value=30.0)
-    
-    cant_industry = st.number_input("Cantidad de Industrias", value=258)
-    t_ind = st.number_input("Tarifa Industrial Promedio ($)", value=350.0)
+    st.header("⚙️ Entrada de Datos")
+    poblacion = st.number_input("Población Total (Habitantes)", value=28900, step=100)
+    st.info("Este modelo calcula automáticamente las viviendas, comercios e industrias de forma proporcional a la población.")
 
-# --- LÓGICA DE CÁLCULO TÉCNICO ---
+# --- LÓGICA DE CÁLCULO TÉCNICO (FACTORES EXACTOS DEL EXCEL) ---
 ppc = 0.623 # kg/hab/día
 ton_dia = (poblacion * ppc) / 1000
 ton_mes = ton_dia * 30
 
-cant_popular = int(poblacion * 0.16) 
-cant_medio = int(poblacion * 0.16)
-cant_alto = int(poblacion * 0.08)
+# Factores exactos por habitante extraídos de tu Excel
+f_pop = 4644.9 / 28900
+f_med = 4644 / 28900
+f_alt = 2580 / 28900
+f_com = 413 / 28900
+f_ind = 258 / 28900
 
-rec_pop = cant_popular * t_pop
-rec_med = cant_medio * t_med
-rec_alt = cant_alto * t_alt
-rec_comercial = cant_comercio * t_com
-rec_industrial = cant_industry * t_ind
-total_general = rec_pop + rec_med + rec_alt + rec_comercial + rec_industrial
+# Unidades Calculadas (BLOQUEADAS PARA EDICIÓN)
+cant_pop = int(poblacion * f_pop)
+cant_med = int(poblacion * f_med)
+cant_alt = int(poblacion * f_alt)
+cant_com = int(poblacion * f_com)
+cant_ind = int(poblacion * f_ind)
 
-# --- VISUALIZACIÓN DE RESULTADOS ---
+# Tarifas Fijas
+t_pop, t_med, t_alt, t_com, t_ind = 1.5, 3.0, 5.0, 30.0, 350.0
+
+# Recaudación por categoría
+rec_pop, rec_med, rec_alt = cant_pop * t_pop, cant_med * t_med, cant_alt * t_alt
+rec_com, rec_ind = cant_com * t_com, cant_ind * t_ind
+total = rec_pop + rec_med + rec_alt + rec_com + rec_ind
+
+# --- PANTALLA PRINCIPAL ---
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Generación Diaria", f"{ton_dia:.2f} Ton")
 m2.metric("Generación Mensual", f"{ton_mes:.2f} Ton")
-m3.metric("Total Suscriptores", f"{cant_popular + cant_medio + cant_alto + cant_comercio + cant_industry:,}")
-m4.metric("Recaudación Total", f"${total_general:,.2f}")
+m3.metric("Total Suscriptores", f"{cant_pop + cant_med + cant_alt + cant_com + cant_ind:,}")
+m4.metric("Recaudación Mensual", f"${total:,.2f}")
 
 st.markdown("---")
+st.subheader("📋 Detalle de Unidades y Recaudación (Cálculo Automático)")
 
-st.subheader("📋 Detalle de Suscriptores y Recaudación")
+# TABLA COMPLETA CON VIVIENDAS, COMERCIOS E INDUSTRIAS
 data = {
-    "Categoría": ["Residencial Popular", "Residencial Medio", "Residencial Alto", "Comercial", "Industrial"],
-    "Unidades": [cant_popular, cant_medio, cant_alto, cant_comercio, cant_industry],
-    "Tarifa ($)": [t_pop, t_med, t_alt, t_com, t_ind],
-    "Recaudación Mensual ($)": [rec_pop, rec_med, rec_alt, rec_comercial, rec_industrial]
+    "Categoría": [
+        "Vivienda Sector Popular", 
+        "Vivienda Sector Medio", 
+        "Vivienda Sector Alto", 
+        "Comercial", 
+        "Industrial"
+    ],
+    "Unidades Arrojadas": [cant_pop, cant_med, cant_alt, cant_com, cant_ind],
+    "Tarifa Fija ($)": [t_pop, t_med, t_alt, t_com, t_ind],
+    "Recaudación Estimada ($)": [rec_pop, rec_med, rec_alt, rec_com, rec_ind]
 }
 df_resumen = pd.DataFrame(data)
 
-df_tablero = df_resumen.copy()
-df_tablero["Recaudación Mensual ($)"] = df_tablero["Recaudación Mensual ($)"].map("${:,.2f}".format)
-st.table(df_tablero)
+# Formateo para visualización en la web
+df_visual = df_resumen.copy()
+df_visual["Recaudación Estimada ($)"] = df_visual["Recaudación Estimada ($)"].map("${:,.2f}".format)
+st.table(df_visual)
 
-# --- FUNCIÓN PARA EXPORTAR A EXCEL ---
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Reporte_Recaudacion')
-    return output.getvalue()
+# --- EXPORTACIÓN A PDF ---
+def generate_pdf(df, p, td, tt):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, txt="REPORTE TÉCNICO - INGENIERÍA GERCON C.A.", ln=True, align="C")
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(200, 10, txt=f"Análisis para Población de {p} Habitantes", ln=True, align="C")
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Indicadores Operativos:", ln=True)
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 10, f"- Generación Diaria: {td:.2f} Toneladas", ln=True)
+    pdf.cell(0, 10, f"- Recaudación Mensual: ${tt:,.2f}", ln=True)
+    pdf.ln(10)
+    
+    # Tabla en el PDF
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(55, 10, "Categoría", 1)
+    pdf.cell(35, 10, "Unidades", 1)
+    pdf.cell(35, 10, "Tarifa ($)", 1)
+    pdf.cell(50, 10, "Subtotal ($)", 1)
+    pdf.ln()
+    
+    pdf.set_font("Arial", "", 10)
+    for i in range(len(df)):
+        pdf.cell(55, 10, str(df.iloc[i, 0]), 1)
+        pdf.cell(35, 10, str(df.iloc[i, 1]), 1)
+        pdf.cell(35, 10, f"{df.iloc[i, 2]:.2f}", 1)
+        pdf.cell(50, 10, f"{df.iloc[i, 3]:.2f}", 1)
+        pdf.ln()
+    return pdf.output(dest="S").encode("latin-1")
 
-excel_data = to_excel(df_resumen)
+pdf_data = generate_pdf(df_resumen, poblacion, ton_dia, total)
+st.download_button("📥 Descargar Reporte en PDF", pdf_data, f"Gercon_{poblacion}_hab.pdf", "application/pdf")
 
-st.download_button(
-    label="📥 Descargar Reporte en Excel",
-    data=excel_data,
-    file_name=f"Reporte_Gercon_{poblacion}_hab.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-st.subheader("📈 Análisis Visual de Ingresos")
-st.bar_chart(df_resumen.set_index("Categoría")["Recaudación Mensual ($)"])
-
-st.info("Ingeniería Gercon C.A. - Reporte generado basado en modelos de gestión de desechos sólidos.")
+st.bar_chart(df_resumen.set_index("Categoría")["Recaudación Estimada ($)"])
