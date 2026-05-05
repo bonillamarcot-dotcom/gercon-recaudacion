@@ -36,41 +36,37 @@ with st.sidebar:
 
 # --- LÓGICA TÉCNICA (BASADA EN EL MODELO GERCON) ---
 
-# 1. GENERACIÓN DE DESECHOS DESGLOSADA
-# Factor base: 18 Ton / 28900 hab
+# 1. GENERACIÓN DE DESECHOS (LIMITADO A 2 DECIMALES)
 factor_gen = 18 / 28900
-ton_total_dia = poblacion * factor_gen
+ton_total_dia = round(poblacion * factor_gen, 2)
 
-# Proporciones de generación por sector (según distribución de suscriptores del modelo)
-f_gen_res, f_gen_com, f_gen_ind = 0.81, 0.12, 0.07 # Basado en la carga operativa del Excel
-ton_res = ton_total_dia * f_gen_res
-ton_com = ton_total_dia * f_gen_com
-ton_ind = ton_total_dia * f_gen_ind
+# Distribución técnica de generación
+f_gen_res, f_gen_com, f_gen_ind = 0.81, 0.12, 0.07 
+ton_res = round(ton_total_dia * f_gen_res, 2)
+ton_com = round(ton_total_dia * f_gen_com, 2)
+ton_ind = round(ton_total_dia * f_gen_ind, 2)
 
-# 2. CENSO FÍSICO (Distribución 60-30-10)
+# 2. CENSO FÍSICO INTEGRADO (60-30-10 + Especiales)
 viviendas_censo_total = poblacion * (5161 / 28900)
-u_pop_censo = viviendas_censo_total * 0.60
-u_med_censo = viviendas_censo_total * 0.30
-u_alt_censo = viviendas_censo_total * 0.10
+u_pop_censo = int(viviendas_censo_total * 0.60)
+u_med_censo = int(viviendas_censo_total * 0.30)
+u_alt_censo = int(viviendas_censo_total * 0.10)
+u_com_censo = int(poblacion * (413 / 28900))
+u_ind_censo = int(poblacion * (258 / 28900))
 
 # 3. BASE DE RECAUDACIÓN (Unidades Financieras)
 u_pop_rec = poblacion * (4644.9 / 28900)
 u_med_rec = poblacion * (4644 / 28900)
 u_alt_rec = poblacion * (2580 / 28900)
-u_com = poblacion * (413 / 28900)
-u_ind = poblacion * (258 / 28900)
+u_com_rec = poblacion * (413 / 28900)
+u_ind_rec = poblacion * (258 / 28900)
 
-# 4. CÁLCULO FINANCIERO (POTENCIAL VS REAL)
-# Residencial
+# 4. CÁLCULO FINANCIERO
 r_res_pot = (u_pop_rec * t_pop) + (u_med_rec * t_med) + (u_alt_rec * t_alt)
 r_res_real = r_res_pot * (efec_res / 100)
-
-# Comercial
-r_com_pot = u_com * t_com
+r_com_pot = u_com_rec * t_com
 r_com_real = r_com_pot * (efec_com / 100)
-
-# Industrial
-r_ind_pot = u_ind * t_ind
+r_ind_pot = u_ind_rec * t_ind
 r_ind_real = r_ind_pot * (efec_ind / 100)
 
 total_potencial = r_res_pot + r_com_pot + r_ind_pot
@@ -78,7 +74,7 @@ total_real = r_res_real + r_com_real + r_ind_real
 
 # --- INTERFAZ DE RESULTADOS ---
 
-# SECCIÓN 1: GENERACIÓN DESGLOSADA
+# SECCIÓN 1: GENERACIÓN (2 DECIMALES)
 st.subheader("🚛 1. Cálculo de Generación de Desechos")
 col_g1, col_g2 = st.columns([1, 2])
 with col_g1:
@@ -86,59 +82,64 @@ with col_g1:
 with col_g2:
     data_gen = {
         "Sector": ["Residencial", "Comercial", "Industrial"],
-        "Generación Estimada (Ton/Día)": [ton_res, ton_com, ton_ind]
+        "Generación (Ton/Día)": [f"{ton_res:.2f}", f"{ton_com:.2f}", f"{ton_ind:.2f}"]
     }
     st.table(pd.DataFrame(data_gen).set_index("Sector"))
 
 st.markdown("---")
 
-# SECCIÓN 2: CENSO FÍSICO
-st.subheader("🏠 2. Censo Físico de Viviendas (Distribución 60-30-10)")
-c1, c2, c3 = st.columns(3)
-c1.metric("Sector Popular", f"{u_pop_censo:,.0f} Uds")
-c2.metric("Sector Medio", f"{u_med_censo:,.0f} Uds")
-c3.metric("Sector Alto", f"{u_alt_censo:,.0f} Uds")
+# SECCIÓN 2: CENSO FÍSICO INTEGRADO
+st.subheader("🏠 2. Censo Físico de Unidades")
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("Pop (60%)", f"{u_pop_censo:,}")
+c2.metric("Med (30%)", f"{u_med_censo:,}")
+c3.metric("Alt (10%)", f"{u_alt_censo:,}")
+c4.metric("Comercial", f"{u_com_censo:,}")
+c5.metric("Industrial", f"{u_ind_censo:,}")
 
 st.markdown("---")
 
-# SECCIÓN 3: RECAUDACIÓN CON SALVEDAD DE EFECTIVIDAD
-st.subheader("💵 3. Estimado de Recaudación Mensual")
-st.info(f"Nota: Los montos reales se calculan aplicando los porcentajes de efectividad seleccionados: Res ({efec_res}%), Com ({efec_com}%), Ind ({efec_ind}%).")
+# SECCIÓN 3: ESTIMACIÓN DE RECAUDACIÓN (RESALTADA)
+st.subheader("💵 3. Estimación de Recaudación Mensual")
+st.caption(f"Aplicando efectividad: Residencial {efec_res}% | Comercial {efec_com}% | Industrial {efec_ind}%")
 
-data_rec = {
-    "Sector": ["Residencial", "Comercial", "Industrial", "TOTAL"],
-    "Recaudación Potencial (100%)": [f"$ {r_res_pot:,.2f}", f"$ {r_com_pot:,.2f}", f"$ {r_ind_pot:,.2f}", f"$ {total_potencial:,.2f}"],
-    "Recaudación Real (Con Efectividad)": [f"$ {r_res_real:,.2f}", f"$ {r_com_real:,.2f}", f"$ {r_ind_real:,.2f}", f"$ {total_real:,.2f}"]
-}
-st.table(pd.DataFrame(data_rec).set_index("Sector"))
+# Encabezados con formato Markdown para resaltar títulos
+st.markdown("""
+| Sector | Recaudación Potencial (100%) | Recaudación Real Estimada |
+| :--- | :---: | :---: |
+| **Residencial** | $ {:,.2f} | **$ {:,.2f}** |
+| **Comercial** | $ {:,.2f} | **$ {:,.2f}** |
+| **Industrial** | $ {:,.2f} | **$ {:,.2f}** |
+| --- | --- | --- |
+| ### **TOTAL** | ### **$ {:,.2f}** | ### **$ {:,.2f}** |
+""".format(r_res_pot, r_res_real, r_com_pot, r_com_real, r_ind_pot, r_ind_real, total_potencial, total_real))
 
-st.success(f"### Proyección Final Mensual: $ {total_real:,.2f}")
+st.markdown("---")
 
 # --- EXPORTACIÓN PDF ---
 def generate_pdf():
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "INGENIERÍA GERCON C.A. - REPORTE DE CÁLCULO", ln=True, align="C")
+    pdf.cell(0, 10, "INGENIERÍA GERCON C.A. - REPORTE TÉCNICO", ln=True, align="C")
     pdf.ln(5)
     
-    # Tabla Generación
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "1. GENERACIÓN DE DESECHOS (TON/DÍA)", ln=True)
+    pdf.cell(0, 10, "1. GENERACIÓN DE DESECHOS", ln=True)
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"- Residencial: {ton_res:.2f} | Comercial: {ton_com:.2f} | Industrial: {ton_ind:.2f}", ln=True)
-    pdf.cell(0, 8, f"TOTAL GENERAL: {ton_total_dia:.2f} Ton/Día", ln=True)
-    pdf.ln(5)
+    pdf.cell(0, 8, f"Total General: {ton_total_dia:.2f} Ton/Día (Res: {ton_res:.2f} | Com: {ton_com:.2f} | Ind: {ton_ind:.2f})", ln=True)
     
-    # Tabla Recaudación
+    pdf.ln(5)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "2. ESTIMADO DE RECAUDACIÓN (SALVEDAD POR EFECTIVIDAD)", ln=True)
+    pdf.cell(0, 10, "2. CENSO DE UNIDADES", ln=True)
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"- Residencial (Efec. {efec_res}%): $ {r_res_real:,.2f}", ln=True)
-    pdf.cell(0, 8, f"- Comercial (Efec. {efec_com}%): $ {r_com_real:,.2f}", ln=True)
-    pdf.cell(0, 8, f"- Industrial (Efec. {efec_ind}%): $ {r_ind_real:,.2f}", ln=True)
+    pdf.cell(0, 8, f"Viviendas: {u_pop_censo+u_med_censo+u_alt_censo} | Comercial: {u_com_censo} | Industrial: {u_ind_censo}", ln=True)
+    
+    pdf.ln(5)
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, f"TOTAL MENSUAL ESTIMADO: $ {total_real:,.2f}", ln=True)
+    pdf.cell(0, 10, "3. RECAUDACIÓN MENSUAL (CON EFECTIVIDAD)", ln=True)
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, f"TOTAL REAL ESTIMADO: $ {total_real:,.2f}", ln=True)
     
     return pdf.output(dest="S").encode("latin-1")
 
